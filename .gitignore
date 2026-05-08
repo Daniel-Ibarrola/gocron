@@ -1,0 +1,19 @@
+prompts.md
+
+# JetBrains IDE
+.idea/
+
+# Go build output
+gocron
+/dist/
+
+# Go test cache / coverage
+*.test
+*.out
+coverage.html
+
+# macOS
+.DS_Store
+
+# goreleaser (added later)
+.goreleaser.yaml
