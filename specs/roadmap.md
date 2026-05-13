@@ -7,10 +7,9 @@ Status legend: `[ ]` not started · `[~]` in progress · `[x]` done
 
 ---
 
-## Phase 1 — Project bootstrap `[ ]`
+## Phase 1 — Project bootstrap `[x]`
 
-- Initialize `go.mod` (`github.com/dibarrola/gocron`, Go 1.22+)
-- Add `github.com/fatih/color` dependency
+- Initialize `go.mod` (`github.com/dibarrola/gocron`, Go 1.26+)
 - `main.go`: read `os.Args`, parse `--next` and `--json` flags, print raw
   expression back to confirm wiring works
 - Directory layout:
@@ -83,6 +82,8 @@ _Set up before continuing feature work so every subsequent PR is gated._
 
 ## Phase 5 — Output formatting `[ ]`
 
+- Add `github.com/fatih/color` dependency (deferred from Phase 1; first
+  consumed here)
 - Plain-text formatter (colored via `fatih/color` when TTY, plain otherwise):
   - Header line with the raw expression
   - Meaning line
