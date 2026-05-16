@@ -3,6 +3,9 @@
 Phases are intentionally small. Each phase should leave the project in a
 working, committable state.
 
+Each functionality phase (2 onward) layers one new piece of cron syntax onto
+the parser **and** the plain-English explainer, with tests for both.
+
 Status legend: `[ ]` not started · `[~]` in progress · `[x]` done
 
 ---
@@ -16,63 +19,77 @@ Status legend: `[ ]` not started · `[~]` in progress · `[x]` done
   ```
   main.go
   internal/
-    cron/      # parser lives here
-    explain/   # English explainer lives here
-    schedule/  # next-run calculator lives here
-    output/    # formatting (text + JSON) lives here
+    cron/      # parser + explainer live here for now
+    schedule/  # next-run calculator lives here (later)
+    output/    # formatting (text + JSON) lives here (later)
   ```
 
-## Phase 2 — 5-field cron parser `[ ]`
+## Phase 2 — Simple expressions, CI, and README `[~]`
 
-Fields: `minute hour dom month dow`
+The minimum end-to-end slice: parse and explain expressions that only use
+wildcards (`*`) and fixed integer values across all five fields, and gate
+future work behind CI.
 
-- Define a `Field` type with its name, allowed range, and parsed value set
-- Parse each field token into one of:
-  - Wildcard (`*`)
-  - Single value (`5`)
-  - Range (`1-5`)
-  - Step (`*/5`, `1-5/2`)
-  - List (`1,2,3`) — any combination of the above separated by commas
-- Expand every field into a `[]int` of matching values
-- Validate bounds per field (minute 0–59, hour 0–23, dom 1–31, month 1–12,
-  dow 0–6)
-- Return a `CronExpr` struct; return a descriptive error on bad input
-- Unit tests: valid expressions, invalid bounds, malformed tokens
+- **Parser** (`internal/cron`):
+  - Split a 5-field expression: `minute hour dom month dow`
+  - Each field is either `*` (wildcard) or a single integer
+  - Surface a `ValidationError` for malformed input (bad field count,
+    disallowed characters) and a `FieldError` for unparseable tokens
+- **Explainer** (`ExplainExpression`):
+  - `* * * * *` → "every minute"
+  - `5 * * * *` → "at minute 5"
+  - `30 6 * * *` → "at 06:30"
+  - Combinations with day-of-month, month, day-of-week (named, e.g.
+    "Monday", "September")
+- **Tests** for parser and explainer covering each shape above
+- **CI** — GitHub Actions workflow at `.github/workflows/ci.yml`,
+  triggered on `push` and `pull_request`:
+  1. `gofmt -l .` (fail on unformatted files)
+  2. `go vet ./...`
+  3. `go test -race ./...`
+  - One job, sequential steps; Go version pinned to match `go.mod`
+  - No linter yet — add in a later phase if churn warrants it
+- **README** at repo root: one-paragraph description, install
+  instructions (`go install ...`), and a usage example showing the
+  simple-expression explainer working end-to-end
 
-## Phase 2.5 — CI pipeline `[ ]`
+## Phase 3 — Ranges `[ ]`
 
-_Set up before continuing feature work so every subsequent PR is gated._
+Extend parser and explainer to handle `a-b` per field.
 
-- **GitHub Actions workflow** at `.github/workflows/ci.yml`, triggered on
-  `push` and `pull_request` to any branch
-- Jobs (all run on `ubuntu-latest`, Go version pinned to match `go.mod`):
-  1. **`fmt`** — `gofmt -l .` fails if any file is not formatted
-  2. **`vet`** — `go vet ./...`
-  3. **`lint`** — `golangci-lint run` with a minimal `.golangci.yml`
-     (enable `errcheck`, `staticcheck`, `unused` at minimum)
-  4. **`test`** — `go test -race ./...`
-- Jobs are independent and run in parallel; `test` is the only one that
-  produces an artifact (coverage summary printed to stdout, no upload yet)
-- Add `golangci-lint` version pin to the workflow (not installed globally)
-- No caching in v1; add later if build times become noticeable
+- Parser: accept `1-5`, validate `a <= b` and both within the field's bounds
+- Explainer phrasing, e.g.:
+  - `0 9-17 * * *` → "at minute 0 past hours 9 through 17"
+  - `* * * * 1-5` → "every minute on Monday through Friday"
+- Tests: valid ranges, inverted ranges, out-of-bounds ranges
 
-## Phase 3 — Plain-English explainer `[ ]`
+## Phase 4 — Steps `[ ]`
 
-- Given a `CronExpr`, produce a single human-readable sentence
-- Handle the most common patterns explicitly:
-  - `* * * * *` → "Every minute"
-  - `*/N * * * *` → "Every N minutes"
-  - `0 * * * *` → "Every hour, on the hour"
-  - `0 H * * *` → "Every day at HH:00"
-  - `0 H D M *` → "At HH:00, on day D of month M"
-  - etc.
-- Fall back to a structured description for patterns that don't match a named
-  shortcut: "At minutes [0,15,30,45], every hour, every day"
-- Unit tests covering each named pattern and the fallback
+Extend parser and explainer to handle `*/N` and `a-b/N` per field.
 
-## Phase 4 — Next-N run calculator `[ ]`
+- Parser: accept `*/5`, `1-30/5`; validate step > 0 and that the base
+  (wildcard or range) is valid
+- Explainer phrasing, e.g.:
+  - `*/5 * * * *` → "every 5 minutes"
+  - `0 9-17/2 * * *` → "at minute 0 past every 2nd hour from 9 through 17"
+- Tests: bare step on wildcard, step on range, zero/negative step
 
-- Given a `CronExpr` and a `time.Time` start, return the next N matching times
+## Phase 5 — Lists `[ ]`
+
+Extend parser and explainer to handle comma-separated combinations of any
+previously-supported token.
+
+- Parser: accept `1,2,3`, `0,15,30,45`, `1-5,10,*/15` — each comma element
+  is independently any of: single value, range, step
+- Explainer phrasing, e.g.:
+  - `0,15,30,45 * * * *` → "at minutes 0, 15, 30, and 45"
+  - `0 9,12,17 * * 1-5` → "at minute 0 past hours 9, 12, and 17 on Monday through Friday"
+- Tests: pure lists, mixed-token lists, duplicate entries, empty elements
+
+## Phase 6 — Next-N run calculator `[ ]`
+
+- Given a parsed expression and a `time.Time` start, return the next N
+  matching times
 - Strategy: advance minute-by-minute from `start+1m`, check each candidate
   against all five fields
 - Handle month/dom edge cases (e.g. Feb 30 never matches)
@@ -80,7 +97,7 @@ _Set up before continuing feature work so every subsequent PR is gated._
   (e.g. `* * 31 2 *`)
 - Unit tests: known expressions with known next-run times
 
-## Phase 5 — Output formatting `[ ]`
+## Phase 7 — Output formatting `[ ]`
 
 - Add `github.com/fatih/color` dependency (deferred from Phase 1; first
   consumed here)
@@ -98,9 +115,9 @@ _Set up before continuing feature work so every subsequent PR is gated._
   ```
 - Wire everything together in `main.go`; full end-to-end flow works
 
-## Phase 6 — Extended formats `[ ]`
+## Phase 8 — Extended formats `[ ]`
 
-_Not in scope until Phase 5 is complete and stable._
+_Not in scope until Phase 7 is complete and stable._
 
 - **6-field (seconds)**: detect 6 tokens, treat first field as seconds (0–59)
 - **Predefined strings**: `@yearly`, `@monthly`, `@weekly`, `@daily`,
@@ -108,11 +125,9 @@ _Not in scope until Phase 5 is complete and stable._
 - **Timezone prefix**: `TZ=America/New_York 0 9 * * *` — parse the prefix,
   use `time.LoadLocation` to compute runs in the specified zone
 
-## Phase 7 — Polish & release prep `[ ]`
-
-_After Phase 6, or in parallel once core is stable._
+## Phase 9 — Polish & release prep `[ ]`
 
 - Friendly, structured error messages (bad field, out-of-range value, etc.)
 - `--help` output
-- README with install instructions and usage examples
+- Expanded README with examples for every supported syntax
 - Goreleaser config for cross-platform GitHub releases
