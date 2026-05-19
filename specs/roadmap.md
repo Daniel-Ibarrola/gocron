@@ -24,7 +24,7 @@ Status legend: `[ ]` not started · `[~]` in progress · `[x]` done
     output/    # formatting (text + JSON) lives here (later)
   ```
 
-## Phase 2 — Simple expressions, CI, and README `[~]`
+## Phase 2 — Simple expressions, CI, and README `[x]`
 
 The minimum end-to-end slice: parse and explain expressions that only use
 wildcards (`*`) and fixed integer values across all five fields, and gate
@@ -53,7 +53,7 @@ future work behind CI.
   instructions (`go install ...`), and a usage example showing the
   simple-expression explainer working end-to-end
 
-## Phase 3 — Ranges `[ ]`
+## Phase 3 — Ranges `[x]`
 
 Extend parser and explainer to handle `a-b` per field.
 

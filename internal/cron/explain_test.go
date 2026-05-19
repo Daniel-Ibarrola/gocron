@@ -54,3 +54,143 @@ func TestInvalidCronExpressions(t *testing.T) {
 		})
 	}
 }
+
+func TestExplainRangeExpressions(t *testing.T) {
+	tests := []struct {
+		name     string
+		expr     string
+		expected string
+	}{
+		{
+			name:     "minute and hour ranges",
+			expr:     "5-10 9-17 * * *",
+			expected: "at minutes 5 through 10 past hours 9 through 17",
+		},
+		{
+			name:     "fixed minute with hour range",
+			expr:     "5 9-17 * * *",
+			expected: "at minute 5 past hours 9 through 17",
+		},
+		{
+			name:     "minute range with fixed hour",
+			expr:     "5-10 4 * * *",
+			expected: "at minutes 5 through 10 past hour 4",
+		},
+		{
+			name:     "month range",
+			expr:     "* * * 6-8 *",
+			expected: "every minute in June through August",
+		},
+		{
+			name:     "day of week range",
+			expr:     "* * * * 1-5",
+			expected: "every minute on Monday through Friday",
+		},
+		{
+			name:     "day of month range",
+			expr:     "* * 1-15 * *",
+			expected: "every minute on days of month 1 through 15",
+		},
+		{
+			name:     "degenerate range renders like single",
+			expr:     "5-5 * * * *",
+			expected: "at minute 5",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			explanation, err := ExplainExpression(test.expr)
+			if err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
+			if explanation != test.expected {
+				t.Errorf("expected explanation %q, got %q", test.expected, explanation)
+			}
+		})
+	}
+}
+
+func TestExplainFieldErrors(t *testing.T) {
+	tests := []struct {
+		name        string
+		expr        string
+		invalidPart string
+	}{
+		{
+			name:        "inverted minute range",
+			expr:        "5-1 * * * *",
+			invalidPart: "5-1",
+		},
+		{
+			name:        "inverted hour range",
+			expr:        "* 10-2 * * *",
+			invalidPart: "10-2",
+		},
+		{
+			name:        "out-of-bounds minute range",
+			expr:        "0-99 * * * *",
+			invalidPart: "0-99",
+		},
+		{
+			name:        "out-of-bounds day of month range",
+			expr:        "* * 0-32 * *",
+			invalidPart: "0-32",
+		},
+		{
+			name:        "out-of-bounds day of week range",
+			expr:        "* * * * 0-7",
+			invalidPart: "0-7",
+		},
+		{
+			name:        "out-of-bounds month range",
+			expr:        "* * * 0-13 *",
+			invalidPart: "0-13",
+		},
+		{
+			name:        "out-of-bounds single minute",
+			expr:        "99 * * * *",
+			invalidPart: "99",
+		},
+		{
+			name:        "out-of-bounds single hour",
+			expr:        "* 24 * * *",
+			invalidPart: "24",
+		},
+		{
+			name:        "out-of-bounds single day of month",
+			expr:        "* * 32 * *",
+			invalidPart: "32",
+		},
+		{
+			name:        "out-of-bounds single month",
+			expr:        "* * * 13 *",
+			invalidPart: "13",
+		},
+		{
+			name:        "day of week 7 rejected",
+			expr:        "* * * * 7",
+			invalidPart: "7",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			explanation, err := ExplainExpression(test.expr)
+			if err == nil {
+				t.Fatalf("expected error for expression %q, got nil (explanation: %q)", test.expr, explanation)
+			}
+			if explanation != "" {
+				t.Errorf("expected empty explanation on error, got %q", explanation)
+			}
+
+			fieldErr, ok := err.(*FieldError)
+			if !ok {
+				t.Fatalf("expected *FieldError, got %T (%v)", err, err)
+			}
+			if fieldErr.Field != test.invalidPart {
+				t.Errorf("expected field %q, got %q", test.invalidPart, fieldErr.Field)
+			}
+		})
+	}
+}
