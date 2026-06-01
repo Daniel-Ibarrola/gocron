@@ -5,6 +5,7 @@ import (
 	"strings"
 )
 
+// ValidationError is returned when the expression fails structural validation before field parsing.
 type ValidationError struct {
 	Expression string
 	Message    string
@@ -14,11 +15,9 @@ func (e *ValidationError) Error() string {
 	return e.Message
 }
 
-// Define a regex that matches characters NOT in our allowed list
-// Allowed: 0-9, *, /, -, comma, and space
 var cronSafeRegex = regexp.MustCompile(`^[0-9*/\-, ]+$`)
 
-// Validate that the cron expression contains all fields and only valid characters
+// validate checks that expr has exactly five fields and contains only allowed characters (0-9 * / - , space).
 func validate(expr string) error {
 	fields := strings.Fields(expr)
 	if len(fields) != 5 {
